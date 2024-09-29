@@ -268,7 +268,7 @@ if ($result->num_rows > 0) {
                     <div class="dropdown-menu position-absolute" aria-labelledby="userProfileDropdown">
                         <div class="user-profile-section">
                             <div class="media mx-auto">
-                                <img src="<?php echo $profile_picture_url?>" class="img-fluid mr-2" alt="avatar">
+                                <img src="" id="profile-picture" class="img-fluid mr-2" alt="avatar">
                                 <div class="media-body">
                                     <h5><?php echo $first_name . ' ' . $last_name?></h5>
                                     <p><?php echo $account_type?></p>
@@ -328,9 +328,9 @@ if ($result->num_rows > 0) {
                 <div class="profile-info">
                     <figure class="user-cover-image"></figure>
                     <div class="user-info" aria-expanded="true">
-                        <img src="<?php echo $profile_picture_url?>" alt="avatar">
+                        <img src="" id="profile-picture" alt="avatar">
                         <h5><?php echo $first_name . " " . $last_name?></h5>
-                        <p class=""><?php echo $account_type?></p>
+                        <p class="" id="account-type"></p>
                     </div>
                 </div>
                 <div class="shadow-bottom"></div>
@@ -504,7 +504,7 @@ if ($result->num_rows > 0) {
                                             <a href="edit-profile.php" class="mt-2 edit-profile"> <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-edit-3"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></a>
                                         </div>
                                         <div class="text-center user-info">
-                                            <img src="<?php echo $profile_picture_url?>" width="20%" alt="avatar">
+                                            <img src="" id="profile-picture" width="20%" alt="avatar">
                                             <p class=""><?php echo $first_name . ' ' . $last_name?></p>
                                         </div>
                                         <div class="user-info-list">

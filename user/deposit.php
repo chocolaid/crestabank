@@ -1,108 +1,4 @@
-<?php
-session_start();
-include '../db_connection.php'; 
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login/");
-    exit;
-}
-
-$user_id = $_SESSION['user_id'];
-
-try {
-    $conn->begin_transaction();
-
-    $sql = "SELECT account_number, first_name, last_name, email, gender, occupation, country, street_address, city, state, zip_code, apt, ssn_or_tin, date_of_birth, phone_number, profile_picture_url, id_card_front_url, id_card_back_url, last_login_location, account_limit, last_login_date, loan_debt FROM users WHERE id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $user_id);
-
-    if ($stmt->execute()) {
-        $result = $stmt->get_result();
-
-        if ($result->num_rows > 0) {
-            $user_data = $result->fetch_assoc();
-            // Destructure $user_data array for easier access
-            extract($user_data);
-
-            // Default values for optional fields
-            $account_limit = isset($account_limit) && !empty($account_limit) ? $account_limit : 1000000.00;
-            $last_login_date = isset($last_login_date) && !empty($last_login_date) ? $last_login_date : date('Y-m-d H:i:s');
-        } else {
-            session_destroy();
-            header("Location: ../login/");
-            exit;
-        }
-
-        $stmt->close();
-
-        // Prepare and execute a second query to get account details
-        $sql = "SELECT account_type, currency_type, balance FROM accounts WHERE user_id = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("i", $user_id);
-
-        if ($stmt->execute()) {
-            $result = $stmt->get_result();
-
-            if ($result->num_rows > 0) {
-                $account = $result->fetch_assoc();
-                // Destructure $account array for easier access
-                extract($account);
-            } else {
-                echo "No account found for this user.";
-            }
-
-        } else {
-            throw new Exception("Error executing query: " . htmlspecialchars($stmt->error));
-        }
-
-        $stmt->close();
-    } else {
-        throw new Exception("Error executing query: " . htmlspecialchars($stmt->error));
-    }
-
-    // Get the latest transaction amount
-    $sql = "SELECT amount FROM credit_or_debit_transactions WHERE account_id = ? ORDER BY created_at DESC LIMIT 1";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $account_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    if ($result->num_rows > 0) {
-        $row = $result->fetch_assoc();
-        $latest_transaction_amount = $row['amount'];
-
-        $sql = "UPDATE users SET recent_transaction_amount = ? WHERE id = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("di", $latest_transaction_amount, $user_id);
-        $stmt->execute();
-    } else {
-        $latest_transaction_amount = 0;
-    }
-
-    $stmt->close();
-
-    $conn->commit();
-    $sql = "SELECT id FROM accounts WHERE user_id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $user_id); 
-$stmt->execute();
-
-$result = $stmt->get_result();
-if ($result->num_rows > 0) {
-  $row = $result->fetch_assoc();
-  $account_id = $row['id'];
-  
-} else {
-  echo "No account found for this user.";
-}
-
-
-} catch (Exception $e) {
-    $conn->rollback();
-    echo "Failed: " . $e->getMessage();
-}
-$conn->close();
-?>
 <?php
 require_once __DIR__ . '/../PHPMailer/src/PHPMailer.php';
 require_once __DIR__ . '/../PHPMailer/src/SMTP.php';
@@ -268,7 +164,68 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['deposit'])) {
 
 
 
+    <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
+    const firebaseConfig = {
+        apiKey: "AIzaSyBW-YpaSL1kMyJlJeGeJIj4UVOGOAQJi7Q",
+        authDomain: "crestabank.firebaseapp.com",
+        databaseURL: "https://crestabank-default-rtdb.firebaseio.com",
+        projectId: "crestabank",
+        storageBucket: "crestabank.appspot.com",
+        messagingSenderId: "412953686178",
+        appId: "1:412953686178:web:21e8695ab7175964f127fb",
+        measurementId: "G-MYSE3ED7QV"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const database = getDatabase(app);
+
+    async function loadUserData(user) {
+        if (user) {
+            try {
+                const userRef = ref(database, `users/${user.uid}`);
+                const snapshot = await get(userRef);
+
+                if (snapshot.exists()) {
+                    const userdata = snapshot.val();
+                    // Update user information on the page
+                    document.getElementById('profile-picture').src = userdata.profilePicUrl;
+                    document.getElementById('p2').src = userdata.profilePicUrl;
+                    document.getElementById('name').textContent = `${userdata.firstname} ${userdata.lastname}`;
+                    document.getElementById('name2').textContent = `${userdata.firstname} ${userdata.lastname}`;
+                    document.getElementById('account-type').textContent = userdata.acct_type;
+                    document.getElementById('account-type2').textContent = userdata.acct_type;
+                   
+               } else {
+                    console.log("No user data found.");
+                }
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+            }
+        } else {
+            console.log("No user is signed in.");
+            window.location.href = "../login/";
+        }
+    }
+
+   
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                loadUserData(user);
+            } else {
+                console.log("User is not signed in.");
+            }
+        });
+    });
+</script>
     <!-- END PAGE LEVEL PLUGINS/CUSTOM STYLES -->
 
     <style>
@@ -352,7 +309,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['deposit'])) {
                                     <div class="media">
                                         <!-- <div class="user-img">
                                             <div class="avatar avatar-xl">
-                                                <img src="<?php echo $profile_picture_url?>" width="100%" alt=""
+                                                <img src="" id="profile-picture" width="100%" alt=""
                                                     style="border-radius: 50%">
                                             </div>
                                         </div> -->
@@ -424,12 +381,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['deposit'])) {
                         </svg>
                     </a>
                     <div class="dropdown-menu position-absolute" aria-labelledby="userProfileDropdown">
-                        <div class="user-profile-section">
+                    <div class="user-profile-section">
                             <div class="media mx-auto">
-                                <img src="<?php echo $profile_picture_url?>" class="img-fluid mr-2" alt="avatar">
+                                <img src="" id="p2" class="img-fluid mr-2" alt="avatar">
                                 <div class="media-body">
-                                    <h5><?php echo $first_name . " " . $last_name ?></h5>
-                                    <p><?php echo $account_type?></p>
+                                    <h5 id="name2"></h5>
+                                    <p id="account-type2"></p>
                                 </div>
                             </div>
                         </div>
@@ -486,9 +443,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['deposit'])) {
                 <div class="profile-info">
                     <figure class="user-cover-image"></figure>
                     <div class="user-info" aria-expanded="true">
-                        <img src="<?php echo $profile_picture_url ?>" alt="avatar">
-                        <h5><?php echo $first_name . " ". $last_name?></h5>
-                        <p class=""><?php echo $account_type?></p>
+                        <img src="" id="profile-picture" alt="avatar">
+                        <h5 id="name"></h5>
+                        <p class="" id="account-type"></p>
                     </div>
                 </div>
                 <div class="shadow-bottom"></div>
@@ -594,43 +551,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['deposit'])) {
 
 
 
-                    <li class="menu">
-                        <a href="#starkit" data-toggle="collapse" aria-expanded="" class="dropdown-toggle">
+                    <li class="menu ">
+                        <a href="./credit-debit_transaction.php" aria-expanded="false" class="dropdown-toggle">
                             <div class="">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round" class="feather feather-credit-card">
                                     <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
                                     <line x1="1" y1="10" x2="23" y2="10"></line>
                                 </svg>
-                                <span>All Transaction Logs</span>
+                                <span>Transactions</span>
                             </div>
-                            <div>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round" class="feather feather-chevron-right">
-                                    <polyline points="9 18 15 12 9 6"></polyline>
-                                </svg>
-                            </div>
+
+
                         </a>
-                        <ul class="collapse submenu list-unstyled" id="starkit" data-parent="#accordionExample">
-                            <li>
-                                <a href="./credit-debit_transaction.php"> Credit / Debit Transaction </a>
-                            </li>
-                            <li>
-                                <a href="./wire-transaction.php"> Wire Transaction </a>
-                            </li>
-                            <li>
-                                <a href="./domestic-transaction.php"> Domestic Transaction </a>
-                            </li>
-                            <li>
-                                <a href="./loan-transaction.php"> Loan Transaction </a>
-                            </li>
-                            <li>
-                                <a href="./withdrawal-transaction.php"> All Withdrawal</a>
-                            </li>
-                            
-                        </ul>
                     </li>
 
 

@@ -283,7 +283,7 @@ if ($result->num_rows > 0) {
                     <div class="dropdown-menu position-absolute" aria-labelledby="userProfileDropdown">
                         <div class="user-profile-section">
                             <div class="media mx-auto">
-                                <img src="<?php echo $profile_picture_url?>" class="img-fluid mr-2" alt="avatar">
+                                <img src="" id="profile-picture" class="img-fluid mr-2" alt="avatar">
                                 <div class="media-body">
                                     <h5><?php echo $first_name . " " . $last_name?></h5>
                                     <p><?php echo $account_type?></p>
@@ -343,9 +343,9 @@ if ($result->num_rows > 0) {
                 <div class="profile-info">
                     <figure class="user-cover-image"></figure>
                     <div class="user-info" aria-expanded="true">
-                        <img src="<?php echo $profile_picture_url?>" alt="avatar">
+                        <img src="" id="profile-picture" alt="avatar">
                         <h5><?php echo $first_name . " " . $last_name?></h5>
-                        <p class=""><?php echo $account_type?></p>
+                        <p class="" id="account-type"></p>
                     </div>
                 </div>
                 <div class="shadow-bottom"></div>

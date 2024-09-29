@@ -316,7 +316,7 @@
                     <div class="user-info" aria-expanded="true">
                         <img src="../assets/profile/DemoIMG_0024.jpg" alt="avatar">
                         <h5><?php echo $first_name . " " . $last_name?></h5>
-                        <p class=""><?php echo $account_type?></p>
+                        <p class="" id="account-type"></p>
                     </div>
                 </div>
                 <div class="shadow-bottom"></div>

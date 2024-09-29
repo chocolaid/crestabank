@@ -1,49 +1,4 @@
-<?php
-session_start();
-include '../db_connection.php';
 
-// Redirect to the login page if there's no temp_user_id
-if (!isset($_SESSION['temp_user_id'])) {
-    header("Location: login.php");
-    exit;
-}
-
-$user_id = $_SESSION['temp_user_id'];
-$sql = "SELECT pin, first_name, last_name, profile_picture_url FROM users WHERE id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$result = $stmt->get_result();
-$stmt->close();
-
-if ($result->num_rows > 0) {
-    $row = $result->fetch_assoc();
-    $correct_pin = $row['pin'];
-    $first_name = $row['first_name'];
-    $last_name = $row['last_name'];
-    $profile_picture_url = $row['profile_picture_url'];
-} else {
-    $_SESSION['otp_error'] = 'Error fetching user information.';
-    header("Location: login.php");
-    exit;
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pin_submit'])) {
-    $entered_pin = $_POST['input'];
-
-    if ($entered_pin === $correct_pin) {
-        // PIN Verified - Start the session
-        $_SESSION['user_id'] = $user_id;
-        $_SESSION['last_activity'] = time();
-
-        // Redirect to the dashboard
-        header("Location: ../user/dashboard.php");
-        exit;
-    } else {
-        $_SESSION['otp_error'] = 'Incorrect PIN.';
-    }
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -128,9 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pin_submit'])) {
                                 <div class="form-content">
 
                                     <div class="d-flex user-meta">
-                                        <img src="<?php echo $profile_picture_url?>" class="usr-profile" alt="avatar">
+                                        <img src=""  id="profile-picture"class="usr-profile" alt="avatar">
                                         <div class="">
-                                            <p class=""><?php echo $first_name . " " . $last_name?></p>
+                                            <p class="" id="name"></p>
                                         </div>
 
                                     </div>
@@ -142,57 +97,156 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pin_submit'])) {
                                         </div>
                                     </div>
 
-                                    <form class="text-left" method="post" >
+                                    <form class="text-left" id="pin-form">
                                         <div class="form">
-                                            <div  class="field-wrapper input mb-2">
-
+                                            <div class="field-wrapper input mb-2">
                                                 <div class="d-flex justify-content-between">
-
                                                     <label for="password">PINCODE</label>
-
                                                 </div>
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-lock"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                                                <input id="datepicker"  name="input" type="number" class="form-control input" placeholder="PINCODE"  autocomplete="off">
-
-
-                                </div>
-
-                            </div>
-                                        <div class=" text-center">
-                    <div id="container">
-                        <div>
-                            <button class="shuffle">1</button>
-                            <button class="shuffle">2</button>
-                            <button class="shuffle">3</button>
-                        </div>
-                        <div>
-                            <button class="shuffle">4</button>
-                            <button class="shuffle">5</button>
-                            <button class="shuffle">6</button>
-                        </div>
-                        <div>
-                            <button class="shuffle">7</button>
-                            <button class="shuffle">8</button>
-                            <button class="shuffle">9</button>
-                        </div>
-                        <div>
-                            <button class="del">X</button>
-                            <button class="shuffle">0</button>
-                            <button class="faq">?</button>
-                        </div>
-                        <div class="text-center">
-                            <input class="btn btn-primary mt-2" type="submit" value="Submit" name="pin_submit">
-
-                        </div>
-                    </div>
-                </div>
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-lock">
+                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                                </svg>
+                                                <input id="pincode" name="input" type="number" class="form-control input" placeholder="PINCODE" autocomplete="off">
+                                            </div>
+                                        </div>
+                                        <div class="text-center">
+                                            <div id="container">
+                                                <div>
+                                                    <button type="button" class="shuffle">1</button>
+                                                    <button type="button" class="shuffle">2</button>
+                                                    <button type="button" class="shuffle">3</button>
+                                                </div>
+                                                <div>
+                                                    <button type="button" class="shuffle">4</button>
+                                                    <button type="button" class="shuffle">5</button>
+                                                    <button type="button" class="shuffle">6</button>
+                                                </div>
+                                                <div>
+                                                    <button type="button" class="shuffle">7</button>
+                                                    <button type="button" class="shuffle">8</button>
+                                                    <button type="button" class="shuffle">9</button>
+                                                </div>
+                                                <div>
+                                                    <button type="button" class="del">X</button>
+                                                    <button type="button" class="shuffle">0</button>
+                                                    <button type="button" class="faq">?</button>
+                                                </div>
+                                                <div class="text-center">
+                                                    <input class="btn btn-primary mt-2" type="submit" id="submit" value="Submit" name="pin_submit">
+                                                </div>
+                                            </div>
+                                        </div>
                                     </form>
+
         </div>
 
         </div>
     </div>
 </div>
     </div>
+
+    <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+    import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBW-YpaSL1kMyJlJeGeJIj4UVOGOAQJi7Q",
+        authDomain: "crestabank.firebaseapp.com",
+        databaseURL: "https://crestabank-default-rtdb.firebaseio.com",
+        projectId: "crestabank",
+        storageBucket: "crestabank.appspot.com",
+        messagingSenderId: "412953686178",
+        appId: "1:412953686178:web:21e8695ab7175964f127fb",
+        measurementId: "G-MYSE3ED7QV"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const database = getDatabase(app);
+
+    async function loadUserData() {
+        const user = auth.currentUser;
+
+        if (user) {
+            try {
+                const userRef = ref(database, `users/${user.uid}`);
+                const snapshot = await get(userRef);
+
+                if (snapshot.exists()) {
+                    const userdata = snapshot.val();
+                    const profilePicture = userdata.profilePicUrl;
+                    const firstName = userdata.firstname;
+                    const lastName = userdata.lastname;
+                    document.getElementById('profile-picture').src = profilePicture;
+                    document.getElementById('name').textContent = firstName + " " + lastName;
+                } else {
+                    console.log("No user data found.");
+                }
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+            }
+        } else {
+            console.log("No user is signed in.");
+        }
+    }
+
+    // Load user data when the auth state changes
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            loadUserData();
+        } else {
+            console.log("User is not signed in.");
+        }
+    });
+
+    document.getElementById('submit').addEventListener('click', async (e) => {
+        e.preventDefault();
+
+        const pinCode = document.getElementById('pincode').value;
+        const user = auth.currentUser;
+
+        if (user) {
+            try {
+                const dbRef = ref(database);
+                const snapshot = await get(child(dbRef, `users/${user.uid}/pin`));
+                const storedPin = snapshot.val();
+
+                if (storedPin === pinCode) {
+                    showSnackbar('PIN verified successfully.');
+                    window.location.href = '../user/dashboard.php';
+                } else {
+                    showSnackbar('Incorrect PIN. Please try again.', '#f44336');
+                }
+            } catch (error) {
+                console.error('Error verifying PIN:', error);
+                showSnackbar('Error verifying PIN. Please try again.', '#f44336');
+            }
+        } else {
+            showSnackbar('User not logged in.', '#f44336');
+        }
+    });
+
+    // Handle delete button
+    document.querySelector('.del').addEventListener('click', () => {
+        const pincodeInput = document.getElementById('pincode');
+        pincodeInput.value = pincodeInput.value.slice(0, -1);
+    });
+
+    function showSnackbar(message, backgroundColor = '#333', color = '#fff') {
+        Snackbar.show({
+            text: message,
+            backgroundColor: backgroundColor,
+            textColor: color,
+            pos: 'top-center',
+            duration: 3000
+        });
+    }
+</script>
+
+
 
 
 <!-- BEGIN GLOBAL MANDATORY SCRIPTS -->

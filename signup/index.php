@@ -1,223 +1,3 @@
-<?php
-session_start();
-include '../db_connection.php'; 
-
-// Function to generate a unique 10-digit account number
-function generateAccountNumber($conn) {
-    $accountNumber = '';
-    $isUnique = false;
-
-    while (!$isUnique) {
-        $accountNumber = str_pad(mt_rand(1, 9999999999), 10, '0', STR_PAD_LEFT);
-
-        // Check if the generated account number is unique
-        $sql = "SELECT id FROM users WHERE account_number = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("s", $accountNumber);
-        $stmt->execute();
-        $stmt->store_result();
-
-        if ($stmt->num_rows == 0) {
-            $isUnique = true;
-        }
-
-        $stmt->close();
-    }
-
-    return $accountNumber;
-}
-
-// Function to generate a 16-digit card number
-function generateCardNumber() {
-    $cardNumber = '4'; // Start with '4' for Visa-like card numbers
-    for ($i = 0; $i < 15; $i++) {
-        $cardNumber .= mt_rand(0, 9);
-    }
-    return $cardNumber;
-}
-
-// Function to generate a random expiry date
-function generateExpiryDate() {
-    $currentYear = date('Y');
-    $expiryYear = $currentYear + mt_rand(2, 5); // Expiry year between current year + 2 to + 5
-    $expiryMonth = str_pad(mt_rand(1, 12), 2, '0', STR_PAD_LEFT); // Month format MM
-    return $expiryMonth . '/' . $expiryYear;
-}
-
-// Function to generate a 3-digit CVV
-function generateCVV() {
-    return str_pad(mt_rand(1, 999), 3, '0', STR_PAD_LEFT);
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['regSubmit'])) {
-
-    // Get form data
-    $firstname = $_POST['firstname'];
-    $lastname = $_POST['lastname'];
-    $acct_currency = $_POST['acct_currency'];
-    $acct_type = $_POST['acct_type'];
-    $occupation = $_POST['occupation'];
-    $country = $_POST['country'];
-    $gender = $_POST['radio-name'];
-    $address = $_POST['address'];
-    $suite = $_POST['suite'];
-    $city = $_POST['city'];
-    $state = $_POST['state'];
-    $zipcode = $_POST['zipcode'];
-    $acct_email = $_POST['acct_email'];
-    $phoneNumber = $_POST['phoneNumber'];
-    $acct_password = $_POST['acct_password'];
-    $ssn = $_POST['ssn']; 
-    $dob = $_POST['dob']; 
-    $pin = '0000';
-    $profile_pic = $_FILES['profile_pic'];
-    $frontID = $_FILES['frontID'];
-    $backID = $_FILES['backID'];
-    $account_status = 'opened';
-    $verification_status = 'unverified';
-
-    // Validate input data
-    if (empty($firstname) || empty($lastname) || empty($acct_currency) || empty($acct_type) ||
-        empty($occupation) || empty($country) || empty($gender) || empty($address) || empty($city) ||
-        empty($state) || empty($zipcode) || empty($acct_email) || empty($phoneNumber) || 
-        empty($acct_password) || empty($ssn) || empty($dob)) {
-        $_SESSION['reg_error'] = 'Please fill all required fields';
-        header("Location: ../signup/");
-        exit;
-    }
-
-    // Generate a unique 10-digit account number
-    $accountNumber = generateAccountNumber($conn);
-
-    // Generate card details
-    $cardNumber = generateCardNumber();
-    $expiryDate = generateExpiryDate();
-    $cvv = generateCVV();
-
-    // Insert user into database
-    $sql = "INSERT INTO users (account_number, password, first_name, last_name, email, gender, occupation, country, street_address, city, state, zip_code, apt, ssn_or_tin, date_of_birth, phone_number, pin, account_status, verification_status, last_login_location, account_limit, last_login_date, loan_debt) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    $stmt = $conn->prepare($sql);
-
-    $last_login_location = NULL;
-    $account_limit = 1000000.00;
-    $last_login_date = NULL;
-    $loan_debt = 0.00;
-    $hashed_password = password_hash($acct_password, PASSWORD_DEFAULT);
-
-    $stmt->bind_param("ssssssssssssssssssssss", $accountNumber, $hashed_password, $firstname, $lastname, 
-    $acct_email, $gender, $occupation, $country, $address, $city, $state, $zipcode, 
-    $suite, $ssn, $dob, $phoneNumber, $pin, $account_status, $verification_status,  //  All your existing variables
-    $last_login_location, 
-    $account_limit, 
-    $last_login_date, 
-    $loan_debt
-    );
-
-
-
-    // Set the values of $account_status and $verification_status
-   
-
-    if ($stmt->execute()) {
-        // Get the last inserted user ID
-        $user_id = $conn->insert_id;
-
-        // Handle uploaded files
-        $upload_dir = '../uploads/'; // Set your upload directory
-
-        // Profile Picture
-        if ($profile_pic['error'] == 0) {
-            $profile_pic_name = uniqid() . '_' . basename($profile_pic['name']);
-            $profile_pic_path = $upload_dir . $profile_pic_name;
-            if (move_uploaded_file($profile_pic['tmp_name'], $profile_pic_path)) {
-                // Update the profile picture URL in the database
-                $sql = "UPDATE users SET profile_picture_url = ? WHERE id = ?";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("si", $profile_pic_path, $user_id);
-                $stmt->execute();
-            } else {
-                $_SESSION['reg_error'] = 'Error uploading profile picture';
-                header("Location: ../signup/");
-                exit;
-            }
-        }
-
-        // ID Card Front
-        if ($frontID['error'] == 0) {
-            $frontID_name = uniqid() . '_' . basename($frontID['name']);
-            $frontID_path = $upload_dir . $frontID_name;
-            if (move_uploaded_file($frontID['tmp_name'], $frontID_path)) {
-                // Update the front ID URL in the database
-                $sql = "UPDATE users SET id_card_front_url = ? WHERE id = ?";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("si", $frontID_path, $user_id);
-                $stmt->execute();
-            } else {
-                $_SESSION['reg_error'] = 'Error uploading ID Card front';
-                header("Location: ../signup/");
-                exit;
-            }
-        }
-
-        // ID Card Back
-        if ($backID['error'] == 0) {
-            $backID_name = uniqid() . '_' . basename($backID['name']);
-            $backID_path = $upload_dir . $backID_name;
-            if (move_uploaded_file($backID['tmp_name'], $backID_path)) {
-                // Update the back ID URL in the database
-                $sql = "UPDATE users SET id_card_back_url = ? WHERE id = ?";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("si", $backID_path, $user_id);
-                $stmt->execute();
-            } else {
-                $_SESSION['reg_error'] = 'Error uploading ID Card back';
-                header("Location: ../signup/");
-                exit;
-            }
-        }
-
-        // Create a new account for the user
-        $sql = "INSERT INTO accounts (user_id, account_type, currency_type, balance) VALUES (?, ?, ?, ?)";
-        $stmt = $conn->prepare($sql);
-        $default_bal = 0.00;
-        $stmt->bind_param("issd", $user_id, $acct_type, $acct_currency, $default_bal);
-        if ($stmt->execute()) {
-            $_SESSION['reg_success'] = 'Registration successful. You can now log in.';
-            header("Location: ../login/"); 
-            exit;
-        } else {
-            $_SESSION['reg_error'] = 'Error creating account';
-            header("Location: ../signup/");
-            exit;
-        }
-    } else {
-        $_SESSION['reg_error'] = 'Registration failed. Please try again.';
-        header("Location: ../signup/");
-        exit;
-    }
-
-    // Close the prepared statement
-    $stmt->close();
-}
-
-if (isset($_SESSION['reg_error'])) {
-    echo '<script>window.onload = function() {
-            showSnackbar("' . $_SESSION['reg_error'] . '", "#FF5722");
-        }</script>';
-    unset($_SESSION['reg_error']);
-}
-
-if (isset($_SESSION['reg_success'])) {
-    echo '<script>window.onload = function() {
-            showSnackbar("' . $_SESSION['reg_success'] . '", "#4CAF50");
-        }</script>';
-    unset($_SESSION['reg_success']);
-}
-?>
-
-
-
 <html lang="en">
 <meta http-equiv="content-type" content="text/html;charset=UTF-8" />
 <head>
@@ -324,7 +104,7 @@ if (isset($_SESSION['reg_success'])) {
         </div>
         <div class="col-lg-6 col-md-6 container-div">
             <div class="form-wizard">
-                <form action="#" method="post" role="form" enctype="multipart/form-data">
+                <form id="registrationForm">
                     <div class="form-wizard-header">
                         <p>Fill all form field to go next step</p>
                         <ul class="list-unstyled form-wizard-steps clearfix">
@@ -903,7 +683,7 @@ if (isset($_SESSION['reg_success'])) {
 
                         <div class="form-group clearfix">
                             <a href="javascript:;" class="form-wizard-previous-btn float-left">Previous</a>
-                            <button class="form-wizard-submit float-right btn btn-primary" type="submit"
+                            <button class="form-wizard-submit float-right btn btn-primary" id="signup" type="submit"
                                 name="regSubmit">Submit</button>
                         </div>
                     </fieldset>
@@ -914,9 +694,161 @@ if (isset($_SESSION['reg_success'])) {
 </section>
 
 
+  <script type="module">
+        // Firebase configuration
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+        import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-storage.js";
+        import { v4 as uuidv4 } from "https://cdn.skypack.dev/uuid";
 
+        const firebaseConfig = {
+            apiKey: "AIzaSyBW-YpaSL1kMyJlJeGeJIj4UVOGOAQJi7Q",
+            authDomain: "crestabank.firebaseapp.com",
+            databaseURL: "https://crestabank-default-rtdb.firebaseio.com",
+            projectId: "crestabank",
+            storageBucket: "crestabank.appspot.com",
+            messagingSenderId: "412953686178",
+            appId: "1:412953686178:web:21e8695ab7175964f127fb",
+            measurementId: "G-MYSE3ED7QV"
+        };
 
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const database = getDatabase(app);
+        const storage = getStorage(app);
 
+        document.getElementById('signup').addEventListener('click', async (e) => {
+            e.preventDefault();
+
+            // Get form data
+            const firstname = document.querySelector('input[name="firstname"]').value;
+            const lastname = document.querySelector('input[name="lastname"]').value;
+            const acct_currency = document.querySelector('select[name="acct_currency"]').value;
+            const acct_type = document.querySelector('select[name="acct_type"]').value;
+            const occupation = document.querySelector('input[name="occupation"]').value;
+            const country = document.querySelector('select[name="country"]').value;
+            const genderElement = document.querySelector('input[name="radio-name"]:checked');
+            const gender = genderElement ? genderElement.value : null;
+            const address = document.querySelector('input[name="address"]').value;
+            const suite = document.querySelector('input[name="suite"]').value;
+            const city = document.querySelector('input[name="city"]').value;
+            const state = document.querySelector('input[name="state"]').value;
+            const zipcode = document.querySelector('input[name="zipcode"]').value;
+            const acct_email = document.querySelector('input[name="acct_email"]').value;
+            const phoneNumber = document.querySelector('input[name="phoneNumber"]').value;
+            const acct_password = document.querySelector('input[name="acct_password"]').value;
+            const ssn = document.querySelector('input[name="ssn"]').value;
+            const dob = document.querySelector('input[name="dob"]').value;
+            const profilePicFile = document.querySelector('input[name="profile_pic"]').files[0];
+            const frontIDFile = document.querySelector('input[name="frontID"]').files[0];
+            const backIDFile = document.querySelector('input[name="backID"]').files[0];
+
+            try {
+                // Create user in Firebase Authentication
+                const userCredential = await createUserWithEmailAndPassword(auth, acct_email, acct_password);
+                const user = userCredential.user;
+                const userId = user.uid;
+
+                // Generate account details
+                const accountNumber = generateAccountNumber();
+                const cardNumber = generateCardNumber();
+                const expiryDate = generateExpiryDate();
+                const cvv = generateCVV();
+
+                // Upload profile picture, front ID, and back ID to Firebase Storage
+                const profilePicUrl = await uploadFile(storage, profilePicFile, `profile_pics/${uuidv4()}`);
+                const frontIDUrl = await uploadFile(storage, frontIDFile, `id_cards/${uuidv4()}_front`);
+                const backIDUrl = await uploadFile(storage, backIDFile, `id_cards/${uuidv4()}_back`);
+
+                // Save user data to Firebase Realtime Database
+                const initialBalance = -1.00;
+
+                await set(ref(database, `users/${userId}`), {
+                    accountNumber,
+                    firstname,
+                    lastname,
+                    acct_currency,
+                    acct_type,
+                    occupation,
+                    country,
+                    gender,
+                    address,
+                    suite,
+                    city,
+                    state,
+                    zipcode,
+                    acct_email,
+                    balance: 0.00,
+                    acct_limit: 1000000;
+                    last_transaction_amount: 0.00,
+                    phoneNumber,
+                    ssn,
+                    dob,
+                    pin: '0000',
+                    account_status: 'opened',
+                    verification_status: 'unverified',
+                    profilePicUrl,
+                    frontIDUrl,
+                    backIDUrl,
+                    accountUnlocked: false,
+                    moneyConverted: false,
+                    pendingAmount: 0.00,
+                    cardDetails: {
+                        cardNumber,
+                        expiryDate,
+                        cvv
+                    },
+                    transactions: [
+                         {
+                            amount: 1,
+                            type: 'debit',
+                            sender_receiver: 'System',
+                            description: `Initial transaction in ${acct_currency}`,
+                            time: new Date().toISOString(),
+                            status: 'completed'
+                        }
+                    ]
+                });
+
+                alert('Registration successful');
+            } catch (error) {
+                console.error('Error during registration:', error);
+                alert('Registration failed. Please try again.');
+            }
+        });
+
+        function generateAccountNumber() {
+            return Math.floor(Math.random() * 9000000000) + 1000000000;
+        }
+
+        function generateCardNumber() {
+            let cardNumber = '4';
+            for (let i = 0; i < 15; i++) {
+                cardNumber += Math.floor(Math.random() * 10).toString();
+            }
+            return cardNumber;
+        }
+
+        function generateExpiryDate() {
+            const currentYear = new Date().getFullYear();
+            const expiryYear = currentYear + Math.floor(Math.random() * 4) + 2;
+            const expiryMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+            return `${expiryMonth}/${expiryYear}`;
+        }
+
+        function generateCVV() {
+            return String(Math.floor(Math.random() * 900) + 100).padStart(3, '0');
+        }
+
+        async function uploadFile(storage, file, path) {
+            const fileRef = storageRef(storage, path);  // Renamed variable to fileRef
+            const snapshot = await uploadBytes(fileRef, file);
+            return getDownloadURL(snapshot.ref);
+        }
+
+    </script>
 
 <!-- BEGIN GLOBAL MANDATORY SCRIPTS -->
 <script src="../bootstrap/js/popper.min.js"></script>

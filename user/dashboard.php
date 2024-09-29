@@ -1,107 +1,3 @@
-<?php
-session_start();
-include '../db_connection.php'; 
-
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login/");
-    exit;
-}
-
-$user_id = $_SESSION['user_id'];
-
-try {
-    $conn->begin_transaction();
-
-    $sql = "SELECT account_number, first_name, last_name, email, gender, occupation, country, street_address, city, state, zip_code, apt, ssn_or_tin, date_of_birth, phone_number, profile_picture_url, id_card_front_url, id_card_back_url, last_login_location, account_limit, last_login_date, loan_debt FROM users WHERE id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $user_id);
-
-    if ($stmt->execute()) {
-        $result = $stmt->get_result();
-
-        if ($result->num_rows > 0) {
-            $user_data = $result->fetch_assoc();
-            // Destructure $user_data array for easier access
-            extract($user_data);
-
-            // Default values for optional fields
-            $account_limit = isset($account_limit) && !empty($account_limit) ? $account_limit : 1000000.00;
-            $last_login_date = isset($last_login_date) && !empty($last_login_date) ? $last_login_date : date('Y-m-d H:i:s');
-        } else {
-            session_destroy();
-            header("Location: ../login/");
-            exit;
-        }
-
-        $stmt->close();
-
-        // Prepare and execute a second query to get account details
-        $sql = "SELECT account_type, currency_type, balance FROM accounts WHERE user_id = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("i", $user_id);
-
-        if ($stmt->execute()) {
-            $result = $stmt->get_result();
-
-            if ($result->num_rows > 0) {
-                $account = $result->fetch_assoc();
-                // Destructure $account array for easier access
-                extract($account);
-            } else {
-                echo "No account found for this user.";
-            }
-
-        } else {
-            throw new Exception("Error executing query: " . htmlspecialchars($stmt->error));
-        }
-
-        $stmt->close();
-    } else {
-        throw new Exception("Error executing query: " . htmlspecialchars($stmt->error));
-    }
-
-    // Get the latest transaction amount
-    $sql = "SELECT amount FROM credit_or_debit_transactions WHERE account_id = ? ORDER BY created_at DESC LIMIT 1";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $account_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    if ($result->num_rows > 0) {
-        $row = $result->fetch_assoc();
-        $latest_transaction_amount = $row['amount'];
-
-        $sql = "UPDATE users SET recent_transaction_amount = ? WHERE id = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("di", $latest_transaction_amount, $user_id);
-        $stmt->execute();
-    } else {
-        $latest_transaction_amount = 0;
-    }
-
-    $stmt->close();
-
-    $conn->commit();
-    $sql = "SELECT id FROM accounts WHERE user_id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $user_id); 
-$stmt->execute();
-
-$result = $stmt->get_result();
-if ($result->num_rows > 0) {
-  $row = $result->fetch_assoc();
-  $account_id = $row['id'];
-  
-} else {
-  echo "No account found for this user.";
-}
-
-
-} catch (Exception $e) {
-    $conn->rollback();
-    echo "Failed: " . $e->getMessage();
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -289,10 +185,10 @@ if ($result->num_rows > 0) {
                     <div class="dropdown-menu position-absolute" aria-labelledby="userProfileDropdown">
                         <div class="user-profile-section">
                             <div class="media mx-auto">
-                                <img src="<?php echo $profile_picture_url ?>" class="img-fluid mr-2" alt="avatar">
+                                <img src="" id="p2" class="img-fluid mr-2" alt="avatar">
                                 <div class="media-body">
-                                    <h5><?php echo $first_name . " " . $last_name ?></h5>
-                                    <?php echo $account_type?>
+                                    <h5 id="name2"></h5>
+                                    <p id="account-type2"></p>
                                 </div>
                             </div>
                         </div>
@@ -349,9 +245,9 @@ if ($result->num_rows > 0) {
                 <div class="profile-info">
                     <figure class="user-cover-image"></figure>
                     <div class="user-info" aria-expanded="true">
-                        <img src="<?php echo $profile_picture_url?>" alt="avatar">
-                        <h5><?php echo $first_name . " " . $last_name ?></h5>
-                        <p class=""><?php echo $account_type?></p>
+                        <img src="" id="profile-picture" alt="avatar">
+                        <h5 id="name"></h5>
+                        <p class="" id="account-type"></p>
                     </div>
                 </div>
                 <div class="shadow-bottom"></div>
@@ -529,6 +425,109 @@ if ($result->num_rows > 0) {
         </div>
         <!--  END SIDEBAR  -->
 <!--  BEGIN CONTENT AREA  -->
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBW-YpaSL1kMyJlJeGeJIj4UVOGOAQJi7Q",
+        authDomain: "crestabank.firebaseapp.com",
+        databaseURL: "https://crestabank-default-rtdb.firebaseio.com",
+        projectId: "crestabank",
+        storageBucket: "crestabank.appspot.com",
+        messagingSenderId: "412953686178",
+        appId: "1:412953686178:web:21e8695ab7175964f127fb",
+        measurementId: "G-MYSE3ED7QV"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const database = getDatabase(app);
+
+    async function loadUserData(user) {
+        if (user) {
+            try {
+                const userRef = ref(database, `users/${user.uid}`);
+                const snapshot = await get(userRef);
+
+                if (snapshot.exists()) {
+                    const userdata = snapshot.val();
+                    // Update user information on the page
+                    document.getElementById('profile-picture').src = userdata.profilePicUrl;
+                    document.getElementById('profile-picture2').src = userdata.profilePicUrl;
+                    document.getElementById('p2').src = userdata.profilePicUrl;
+                    document.getElementById('name').textContent = `${userdata.firstname} ${userdata.lastname}`;
+                    document.getElementById('name2').textContent = `${userdata.firstname} ${userdata.lastname}`;
+                    document.getElementById('name3').textContent = `${userdata.firstname} ${userdata.lastname}`;
+                    document.getElementById('account-type').textContent = userdata.acct_type;
+                    document.getElementById('account-type2').textContent = userdata.acct_type;
+                    document.getElementById('balance').textContent = `${userdata.balance} ${userdata.acct_currency}`;
+                    document.getElementById('pending-amount').textContent = `${userdata.pendingAmount} ${userdata.acct_currency}`;
+                    document.getElementById('loan-balance').textContent = `${userdata.loanBalance ?? 0} ${userdata.acct_currency}`;
+                    document.getElementById('account-status').textContent = (userdata.account_status == "opened") ? "Active" : "Inactive";
+                    document.getElementById('account-limit').textContent = `${userdata.acct_limit} ${userdata.acct_currency}`;
+                    document.getElementById('account-limit2').textContent = `${userdata.acct_limit} ${userdata.acct_currency}`;
+                    document.getElementById('last-transaction-amount').textContent = `${userdata.last_transaction_amount} ${userdata.acct_currency}`;
+                    
+                    // Load transactions data
+                    loadTransactions(userdata.transactions, userdata.acct_currency);
+                } else {
+                    console.log("No user data found.");
+                }
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+            }
+        } else {
+            console.log("No user is signed in.");
+            window.location.href = "../login/";
+        }
+    }
+
+    function loadTransactions(transactions, acct_currency) {
+    const tableBody = document.getElementById('transactions-body');
+    tableBody.innerHTML = ''; // Clear previous data
+
+    if (transactions && transactions.length > 0) {
+        // Get the last 5 transactions
+        const recentTransactions = transactions.slice(-5);
+
+        recentTransactions.forEach((transaction, index) => {
+            const row = document.createElement('tr');
+
+            row.innerHTML = `
+                <td>${transactions.length - 5 + index + 1}</td>
+                <td><div class='td-content product-invoice'>${transaction.amount} ${acct_currency}</div></td>
+                <td><div class='td-content product-brand text-primary'><span class='${transaction.type === 'credit' ? 'text-success' : 'text-danger'}'>${transaction.type}</span></div></td>
+                <td><div class='td-content product-invoice'>${transaction.sender_receiver}</div></td>
+                <td><div class='td-content product-brand'>${transaction.description}</div></td>
+                <td><div class='td-content product-invoice'>${new Date(transaction.time).toLocaleDateString()}</div></td>
+                <td><div class='td-content pricing'><span>${new Date(transaction.time).toLocaleTimeString()}</span></div></td>
+                <td><div class='td-content'><span class='badge outline-badge-primary shadow-none col-md-12'>${transaction.status}</span></div></td>
+            `;
+            
+            tableBody.appendChild(row);
+        });
+    } else {
+        tableBody.innerHTML = "<tr><td colspan='8' class='text-center'>No transactions found.</td></tr>";
+    }
+}
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                loadUserData(user);
+            } else {
+                console.log("User is not signed in.");
+            }
+        });
+    });
+</script>
+
+
 <div id="content" class="main-content">
     <div class="layout-px-spacing">
 
@@ -567,7 +566,7 @@ if ($result->num_rows > 0) {
 
                                     <div class="w-summary-info">
                                         <h6>Limit</h6>
-                                        <p class="summary-count">$<?php echo $account_limit ?></p>
+                                        <p class="summary-count" id="account-limit2"></p>
                                     </div>
 
                                     <div class="w-summary-stats">
@@ -652,7 +651,7 @@ if ($result->num_rows > 0) {
                     <div class="widget-heading">
                         <div class="wallet-usr-info">
                             <div class="usr-name">
-                                <span><img src="<?php echo $profile_picture_url?>" alt="admin-profile" class="img-fluid"> <?php echo $first_name . " " . $last_name ?></span>
+                                <span><img src="" id="profile-picture2" alt="admin-profile" class="img-fluid"> <span style="padding-left: 5px;" id="name3"></span></span>
                             </div>
                             <div class="add">
                                 <span><a  data-toggle="modal" data-target="#exampleModal"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plus text-white"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></a></span>
@@ -660,7 +659,7 @@ if ($result->num_rows > 0) {
                         </div>
                         <div class="wallet-balance">
                             <p>Balance</p>
-                            <h5 class=""><span class="w-currency"><?php echo $balance . '&nbsp;' ?></span><?php echo $currency_type?></h5>
+                            <h5 id="balance" class=""><span class="w-currency"></h5>
                         </div>
                         
                        
@@ -674,13 +673,13 @@ if ($result->num_rows > 0) {
                             <span>Pending<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-down"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
 
 
-                            <p> $0.00                                 
+                            <p id="pending-amount">                               
                             </p>
                         </div>
 
                         <div class="w-a-info funds-spent">
                             <span>My Loan <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-chevron-up"><polyline points="18 15 12 9 6 15"></polyline></svg></span>
-                            <p class="text-danger">$0
+                            <p class="text-danger" id="loan-balance">
                             </p>
                         </div>
                     </div>
@@ -688,33 +687,23 @@ if ($result->num_rows > 0) {
                     <div class="widget-content">
 
                         <div class="bills-stats; text-center">
-                            <button class="btn btn-failed btn-sm">ACTIVE</button>                        </div>
+                            <p id="account-status" class="btn btn-failed btn-sm"></p>                        </div>
 
                         <div class="invoice-list">
             
                             <div class="inv-detail">
                                 <div class="info-detail-1">
                                     <p>Account Limit</p>
-                                    <p><span class="w-currency">$<?php echo  $account_limit ?></span><span class="bill-amount"></span></p>
+                                    <p><span id="account-limit" class="w-currency"></span></p>
                                 </div>
                                                                
                              
                                 <div class="info-detail-3">
                                     <p>Recent Transaction</p>
                                     
-                                     <p><span> $<?php echo $latest_transaction_amount?></span></p>
+                                     <p id="last-transaction-amount"></p>
                                 </div>
                                 
-                                <div class="info-detail-2">
-                                    <p>Last Login Date:</p>
-                                    <p class=""><span class="bill-amount text-danger"><?php echo $last_login_date ?></span></p>
-                                </div>
-
-                                <div class="info-detail-2">
-                                    <p>Last Login IP:</p>
-                                    <p class=""><span class="bill-amount text-danger"><?php echo $last_login_location ?></span></p>
-                                </div>
-                          
                           
                             </div>
 
@@ -736,61 +725,26 @@ if ($result->num_rows > 0) {
                     </div>
 
                     <div class="widget-content">
-                        <div class="table-responsive">
-                            <?php
-                                $sql = "SELECT * FROM credit_or_debit_transactions WHERE account_id = ? ORDER BY created_at DESC LIMIT 5";
-                                $stmt = $conn->prepare($sql);
-                                $stmt->bind_param("i", $account_id);
-                                
-                                if ($stmt->execute()) {
-                                    $result = $stmt->get_result();
-                                
-                                    // Display the transactions in the table if any transactions are found
-                                    if ($result->num_rows > 0) {
-                                        echo "<table class='table'>";
-                                        echo "<thead>";
-                                        echo "<tr>";
-                                        echo "<th><div class='th-content'>S/N</div></th>";
-                                        echo "<th><div class='th-content'>AMOUNT</div></th>";
-                                        echo "<th><div class='th-content th-heading'>TYPE</div></th>";
-                                        echo "<th><div class='th-content'>SENDER / RECEIVER</div></th>";
-                                        echo "<th><div class='th-content'>DESCRIPTION</div></th>";
-                                        echo "<th><div class='th-content th-heading'>CREATED AT</div></th>";
-                                        echo "<th><div class='th-content th-heading'>TIME CREATED</div></th>";
-                                        echo "<th><div class='th-content'>Status</div></th>";
-                                        echo "</tr>";
-                                        echo "</thead>";
-                                        echo "<tbody>";
-                                        $count = 1;
-                                        while ($row = $result->fetch_assoc()) {
-                                            echo "<tr>";
-                                            echo "<td>" . $count++ . "</td>";
-                                            echo "<td><div class='td-content product-invoice'>" . $row['amount'] . "</div></td>";
-                                            $type_class = $row['type'] == 'Credit' ? 'text-success' : 'text-danger';
-                                            echo "<td><div class='td-content product-brand text-primary'><span class='{$type_class}'>" . $row['type'] . "</span></div></td>";
-                                            echo "<td><div class='td-content product-invoice'>" . $row['sender_receiver'] . "</div></td>";
-                                            echo "<td><div class='td-content product-brand '>" . $row['description'] . "</div></td>";
-                                            echo "<td><div class='td-content product-invoice'>" . $row['created_at'] . "</div></td>";
-                                            echo "<td><div class='td-content pricing'><span class=''>" . $row['time_created'] . "</span></div></td>";
-                                            echo "<td><div class='td-content'><span class=''><span class='badge outline-badge-primary shadow-none col-md-12'>" . $row['status'] . "</span></span></div></td>";
-                                            echo "</tr>";
-                                        }
-                                        echo "</tbody>";
-                                        echo "</table>";
-                                
-                                    } else {
-                                        // Display the text if no transactions are found
-                                        echo "<p class='text-center'>No recent transactions found.</p>";
-                                    }
-                                
-                                    // Close the prepared statement
-                                    $stmt->close();
-                                } else {
-                                    echo "Error executing query: " . htmlspecialchars($stmt->error);
-                                }
-                                $conn->close();
-                            ?>
-                        </div>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th><div class='th-content'>S/N</div></th>
+                                    <th><div class='th-content'>AMOUNT</div></th>
+                                    <th><div class='th-content th-heading'>TYPE</div></th>
+                                    <th><div class='th-content'>SENDER / RECEIVER</div></th>
+                                    <th><div class='th-content'>DESCRIPTION</div></th>
+                                    <th><div class='th-content th-heading'>CREATED AT</div></th>
+                                    <th><div class='th-content th-heading'>TIME CREATED</div></th>
+                                    <th><div class='th-content'>Status</div></th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactions-body">
+                                <!-- Transactions will be inserted here by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+
                     </div>
                 </div>
             </div>

@@ -1,65 +1,3 @@
-<?php
-session_start();
-include '../db_connection.php'; 
-
-$timeout_duration = 1800;
-
-if (isset($_SESSION['user_id']) && isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] < $timeout_duration)) {
-    $_SESSION['last_activity'] = time();
-    header("Location: ../user/dashboard.php");
-    exit;
-} else {
-    if (isset($_SESSION['user_id'])) {
-        session_destroy();
-    }
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
-        $acct_no = $_POST['acct_no'];
-        $acct_password = $_POST['acct_password'];
-
-        // Validate credentials (use prepared statements for security)
-        $sql = "SELECT id, account_number, password FROM users WHERE account_number = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("s", $acct_no);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        if ($result->num_rows > 0) {
-            $row = $result->fetch_assoc();
-            if (password_verify($acct_password, $row['password'])) {
-
-                // Store the user_id in a temporary session variable
-                $_SESSION['temp_user_id'] = $row['id'];
-
-                // Update last_login_date and last_login_location
-                $sql = "UPDATE users SET last_login_date = ?, last_login_location = ? WHERE id = ?";
-                $stmt = $conn->prepare($sql);
-
-                // Convert timestamp to MySQL DATETIME format
-                $last_login_date = date("Y-m-d H:i:s");
-
-                // Get the IP address
-                $last_login_location = $_SERVER['REMOTE_ADDR'];
-
-                $stmt->bind_param("ssi", $last_login_date, $last_login_location, $_SESSION['temp_user_id']);
-                $stmt->execute();
-
-                // Redirect to OTP page
-                header("Location: otp.php");
-                exit;
-
-            } else {
-                $_SESSION['login_error'] = 'Invalid account number or password';
-            }
-        } else {
-            $_SESSION['login_error'] = 'Invalid account number or password';
-        }
-        $stmt->close();
-    }
-}
-?>
-
-
 <!DOCTYPE html><html lang="en"><head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -146,7 +84,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['last_activity']) && (time() 
                     <p class="">Log in to your account to continue.</p>
             
 
-                    <form class="text-left" method="POST">
+                    <form class="text-left" id="login-form">
                         <div class="form">
 
                             <div id="username-field" class="field-wrapper input">
@@ -177,17 +115,74 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['last_activity']) && (time() 
         </div>
     </div>
 </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+    import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBW-YpaSL1kMyJlJeGeJIj4UVOGOAQJi7Q",
+        authDomain: "crestabank.firebaseapp.com",
+        databaseURL: "https://crestabank-default-rtdb.firebaseio.com",
+        projectId: "crestabank",
+        storageBucket: "crestabank.appspot.com",
+        messagingSenderId: "412953686178",
+        appId: "1:412953686178:web:21e8695ab7175964f127fb",
+        measurementId: "G-MYSE3ED7QV"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const database = getDatabase(app);
+
+    // Check if user is already logged in
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            window.location.href = './otp.php';
+        }
+    });
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const accountId = document.querySelector('input[name="acct_no"]').value;
+        const password = document.querySelector('input[name="acct_password"]').value;
+
+        try {
+            // Retrieve the user's email using the accountId
+            const dbRef = ref(database);
+            const snapshot = await get(child(dbRef, `users`));
+            let userEmail = null;
+
+            if (snapshot.exists()) {
+                snapshot.forEach(childSnapshot => {
+                    const userData = childSnapshot.val();
+                    if (userData.accountNumber == accountId) {
+                        userEmail = userData.acct_email;
+                    }
+                });
+            }
+
+            if (userEmail) {
+                // Sign in with email and password
+                await signInWithEmailAndPassword(auth, userEmail, password);
+                window.location.href = './otp.php';
+            } else {
+                showSnackbar('Account ID not found');
+            }
+        } catch (error) {
+            console.error('Login failed:', error);
+            showSnackbar('Login failed. Please check your Account ID and Password.');
+        }
+    });
+</script>
+
 <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Check if there was a login error session flag set
-            <?php
-            if (isset($_SESSION['login_error'])) {
-                echo "showSnackbar('Invalid account ID or password', '#FF5722');";
-                unset($_SESSION['login_error']); // Clear the login error flag
-            }
-            ?>
 
-            function showSnackbar(message, backgroundColor) {
+            function showSnackbar(message, backgroundColor='#333', color='#fff') {
                 Snackbar.show({
                     text: message,
                     backgroundColor: backgroundColor,
@@ -197,6 +192,8 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['last_activity']) && (time() 
             }
         });
     </script>
+
+
 
 
 <script src="js/popper.min.js"></script>
@@ -233,7 +230,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['last_activity']) && (time() 
             $('.input').val($('.input').val().substring(0,$('.input').val().length - 1));
         });
         $('.faq').click(function(){
-            alert("Enter Your OTP Sent to you ");
+            showSnackbar("Enter Your OTP Sent to you ");
         })
         $('.shuffle').click(function(){
             $('.input').val($('.input').val() + $(this).text());
